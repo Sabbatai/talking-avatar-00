@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎙️ Voice AI Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+
+        .chat-display {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 10px;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            background: #667eea;
+            color: white;
+            margin-left: 20%;
+        }
+
+        .bot-message {
+            background: white;
+            color: #333;
+            margin-right: 20%;
+            border: 1px solid #ddd;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .record-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 20px;
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            font-size: 2em;
+            cursor: pointer;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .record-button:hover {
+            background: #5568d3;
+            transform: scale(1.05);
+        }
+
+        .record-button:active {
+            transform: scale(0.95);
+        }
+
+        .record-button.recording {
+            background: #ef4444;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 4px 30px rgba(239, 68, 68, 0.8); }
+        }
+
+        .record-button.processing {
+            background: #f59e0b;
+            cursor: not-allowed;
+        }
+
+        .status {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            min-height: 20px;
+        }
+
+        .timing {
+            text-align: center;
+            color: #999;
+            font-size: 0.8em;
+            margin-top: 10px;
+        }
+
+        .clear-button {
+            background: transparent;
+            color: #ef4444;
+            border: 1px solid #ef4444;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .clear-button:hover {
+            background: #ef4444;
+            color: white;
+        }
+
+        .instructions {
+            background: #e0e7ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+
+        .instructions strong {
+            color: #667eea;
+        }
+
+        audio {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ Voice AI Chatbot</h1>
+        <p class="subtitle">Press and hold the button to speak</p>
+
+        <div class="instructions">
+            <strong>How to use:</strong><br>
+            1. Press and HOLD the microphone button<br>
+            2. Speak your message<br>
+            3. Release to send<br>
+            4. Wait for AI response
+        </div>
+
+        <div class="chat-display" id="chatDisplay">
+            <div class="message bot-message">
+                👋 Hello! I'm your AI assistant. Press the button and speak to start chatting!
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="record-button" id="recordButton">
+                🎤
+            </button>
+            <div class="status" id="status">Ready to record</div>
+            <div class="timing" id="timing"></div>
+            <button class="clear-button" onclick="clearChat()">Clear Chat</button>
+        </div>
+    </div>
+
+    <audio id="audioPlayer"></audio>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let isProcessing = false;
+        const sessionId = 'session_' + Date.now();
+
+        const recordButton = document.getElementById('recordButton');
+        const status = document.getElementById('status');
+        const timing = document.getElementById('timing');
+        const chatDisplay = document.getElementById('chatDisplay');
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        // Initialize audio recording
+        async function initRecorder() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    if (audioChunks.length > 0) {
+                        await sendAudio();
+                    }
+                };
+
+                console.log('✅ Microphone initialized');
+            } catch (error) {
+                console.error('❌ Microphone error:', error);
+                status.textContent = '❌ Microphone access denied';
+            }
+        }
+
+        // Start recording
+        function startRecording() {
+            if (isProcessing) return;
+
+            audioChunks = [];
+            mediaRecorder.start();
+            isRecording = true;
+
+            recordButton.classList.add('recording');
+            recordButton.textContent = '🔴';
+            status.textContent = '🎙️ Recording... (Release to send)';
+        }
+
+        // Stop recording
+        function stopRecording() {
+            if (!isRecording) return;
+
+            mediaRecorder.stop();
+            isRecording = false;
+
+            recordButton.classList.remove('recording');
+            recordButton.classList.add('processing');
+            recordButton.textContent = '⏳';
+            status.textContent = '⏳ Processing...';
+        }
+
+        // Send audio to server
+        async function sendAudio() {
+            isProcessing = true;
+
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'recording.wav');
+            formData.append('session_id', sessionId);
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Server error');
+                }
+
+                const data = await response.json();
+
+                // Display user message
+                addMessage(data.transcription, 'user');
+
+                // Display bot message
+                addMessage(data.response, 'bot');
+
+                // Play audio response
+                audioPlayer.src = data.audio_url;
+                audioPlayer.play();
+
+                // Show timing
+                timing.textContent = `⏱️ ${data.timing.total}s (Transcribe: ${data.timing.transcribe}s, LLM: ${data.timing.llm}s, TTS: ${data.timing.tts}s)`;
+
+                status.textContent = '✅ Response received!';
+                setTimeout(() => {
+                    status.textContent = 'Ready to record';
+                }, 2000);
+
+            } catch (error) {
+                console.error('❌ Error:', error);
+                status.textContent = '❌ Error processing request';
+                addMessage('Sorry, there was an error processing your request.', 'bot');
+            }
+
+            isProcessing = false;
+            recordButton.classList.remove('processing');
+            recordButton.textContent = '🎤';
+        }
+
+        // Add message to chat display
+        function addMessage(text, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            messageDiv.textContent = text;
+            chatDisplay.appendChild(messageDiv);
+            chatDisplay.scrollTop = chatDisplay.scrollHeight;
+        }
+
+        // Clear chat
+        async function clearChat() {
+            if (confirm('Clear chat history?')) {
+                chatDisplay.innerHTML = '<div class="message bot-message">👋 Chat cleared! Press the button to start a new conversation.</div>';
+                timing.textContent = '';
+
+                await fetch(`/api/clear/${sessionId}`, { method: 'POST' });
+            }
+        }
+
+        // Button event listeners
+        recordButton.addEventListener('mousedown', startRecording);
+        recordButton.addEventListener('mouseup', stopRecording);
+        recordButton.addEventListener('mouseleave', () => {
+            if (isRecording) stopRecording();
+        });
+
+        // Touch events for mobile
+        recordButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startRecording();
+        });
+        recordButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopRecording();
+        });
+
+        // Initialize on page load
+        window.addEventListener('load', initRecorder);
+    </script>
+</body>
+</html>

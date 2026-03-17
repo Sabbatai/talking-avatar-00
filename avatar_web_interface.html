@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Avatar Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #2d2d2d;
+            padding: 16px 24px;
+            border-bottom: 1px solid #3d3d3d;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            position: relative;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 1280px;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        #avatarVideo {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .video-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            padding: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status {
+            font-size: 14px;
+            color: #e0e0e0;
+        }
+
+        .status.listening {
+            color: #4CAF50;
+        }
+
+        .status.processing {
+            color: #FF9800;
+        }
+
+        .status.error {
+            color: #f44336;
+        }
+
+        .controls {
+            background: #2d2d2d;
+            padding: 20px 24px;
+            border-top: 1px solid #3d3d3d;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .mic-button {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            border: none;
+            background: #f44336;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+        }
+
+        .mic-button:hover {
+            background: #d32f2f;
+            transform: scale(1.05);
+        }
+
+        .mic-button.recording {
+            background: #4CAF50;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+            }
+            50% {
+                box-shadow: 0 4px 24px rgba(76, 175, 80, 0.6);
+            }
+        }
+
+        .mic-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .transcript {
+            position: absolute;
+            top: 24px;
+            left: 24px;
+            right: 24px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 16px;
+            border-radius: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        .transcript-line {
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+
+        .transcript-line:last-child {
+            margin-bottom: 0;
+        }
+
+        .transcript-label {
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .transcript-label.user {
+            color: #2196F3;
+        }
+
+        .transcript-label.avatar {
+            color: #4CAF50;
+        }
+
+        .loading-indicator {
+            display: none;
+            font-size: 14px;
+            color: #FF9800;
+            margin-left: 16px;
+        }
+
+        .loading-indicator.active {
+            display: inline-block;
+        }
+
+        .loading-indicator::after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        .instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #999;
+        }
+
+        .instructions.hidden {
+            display: none;
+        }
+
+        .instructions h2 {
+            font-size: 24px;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+
+        .instructions p {
+            font-size: 16px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>AI Avatar Conference</h1>
+    </div>
+
+    <div class="main-content">
+        <div class="video-container">
+            <video id="avatarVideo" autoplay playsinline controls></video>
+            
+            <div class="instructions" id="instructions">
+                <h2>👋 Ready to Chat</h2>
+                <p>Press and hold the microphone (or spacebar) to speak</p>
+            </div>
+
+            <div class="transcript" id="transcript" style="display: none;"></div>
+
+            <div class="video-overlay">
+                <div class="status" id="status">Ready</div>
+                <div class="loading-indicator" id="loadingIndicator">Processing</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="mic-button" id="micButton" title="Hold to speak (or press and hold spacebar)">
+            🎤
+        </button>
+    </div>
+
+    <script>
+        // Configuration
+        const SERVER_URL = 'http://localhost:8001'; // Separate web server port
+
+        // State
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let conversationHistory = [];
+
+        // Elements
+        const micButton = document.getElementById('micButton');
+        const statusElement = document.getElementById('status');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const avatarVideo = document.getElementById('avatarVideo');
+        const transcriptElement = document.getElementById('transcript');
+        const instructionsElement = document.getElementById('instructions');
+
+        // Initialize
+        async function init() {
+            try {
+                // Request microphone permission
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                console.log('Microphone access granted');
+                
+                // Stop the stream (we'll restart when recording)
+                stream.getTracks().forEach(track => track.stop());
+                
+                updateStatus('Ready to chat', 'ready');
+            } catch (error) {
+                console.error('Microphone access denied:', error);
+                updateStatus('Microphone access required', 'error');
+                micButton.disabled = true;
+            }
+        }
+
+        // Update status
+        function updateStatus(message, type = '') {
+            statusElement.textContent = message;
+            statusElement.className = 'status ' + type;
+        }
+
+        // Update transcript
+        function addToTranscript(label, text, isUser = false) {
+            const line = document.createElement('div');
+            line.className = 'transcript-line';
+            
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'transcript-label ' + (isUser ? 'user' : 'avatar');
+            labelSpan.textContent = label + ':';
+            
+            const textSpan = document.createElement('span');
+            textSpan.textContent = text;
+            
+            line.appendChild(labelSpan);
+            line.appendChild(textSpan);
+            
+            transcriptElement.appendChild(line);
+            transcriptElement.style.display = 'block';
+            
+            // Auto-scroll to bottom
+            transcriptElement.scrollTop = transcriptElement.scrollHeight;
+        }
+
+        // Start recording
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'audio/webm'
+                });
+                
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    // Stop all tracks
+                    stream.getTracks().forEach(track => track.stop());
+                    
+                    // Process the recording
+                    await processRecording();
+                };
+                
+                mediaRecorder.start();
+                isRecording = true;
+                micButton.classList.add('recording');
+                micButton.textContent = '⏹️';
+                updateStatus('Listening...', 'listening');
+                
+                // Hide instructions after first recording
+                instructionsElement.classList.add('hidden');
+                
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                updateStatus('Error accessing microphone', 'error');
+            }
+        }
+
+        // Stop recording
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                isRecording = false;
+                micButton.classList.remove('recording');
+                micButton.textContent = '🎤';
+            }
+        }
+
+        // Process recording
+        async function processRecording() {
+            if (audioChunks.length === 0) {
+                updateStatus('No audio recorded', 'error');
+                return;
+            }
+
+            updateStatus('Processing...', 'processing');
+            loadingIndicator.classList.add('active');
+            micButton.disabled = true;
+
+            try {
+                // Convert audio to blob
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                
+                // Create form data
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.webm');
+                
+                // Send to server
+                const response = await fetch(`${SERVER_URL}/chat`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Update transcript
+                addToTranscript('You', data.user_text, true);
+                addToTranscript('Avatar', data.avatar_text, false);
+                
+                // Play video response
+                if (data.video_url) {
+                    console.log('Playing video:', data.video_url);
+                    avatarVideo.src = `${SERVER_URL}${data.video_url}`;
+                    
+                    // Wait for video to load and play
+                    avatarVideo.onloadeddata = () => {
+                        console.log('Video loaded, playing...');
+                        avatarVideo.play().catch(err => {
+                            console.error('Error playing video:', err);
+                        });
+                    };
+                    
+                    avatarVideo.onerror = (e) => {
+                        console.error('Video error:', e);
+                        updateStatus('Error loading video', 'error');
+                    };
+                } else {
+                    console.error('No video URL in response');
+                }
+                
+                updateStatus('Ready', 'ready');
+                
+            } catch (error) {
+                console.error('Error processing recording:', error);
+                updateStatus('Error: ' + error.message, 'error');
+            } finally {
+                loadingIndicator.classList.remove('active');
+                micButton.disabled = false;
+            }
+        }
+
+        // Button press and hold handlers
+        micButton.addEventListener('mousedown', () => {
+            if (!micButton.disabled && !isRecording) {
+                startRecording();
+            }
+        });
+
+        micButton.addEventListener('mouseup', () => {
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+
+        micButton.addEventListener('mouseleave', () => {
+            // Stop recording if user drags off button
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+
+        // Touch support for mobile
+        micButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!micButton.disabled && !isRecording) {
+                startRecording();
+            }
+        });
+
+        micButton.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+
+        // Keyboard support (spacebar)
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !micButton.disabled && !isRecording) {
+                e.preventDefault();
+                startRecording();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && isRecording) {
+                e.preventDefault();
+                stopRecording();
+            }
+        });
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
